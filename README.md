@@ -390,14 +390,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 📞 Contact & Support
-
-- **GitHub Issues**: [Report bugs or request features](https://github.com/saidulIslam1602/GameMatch-Personalized-Game-Recommendation-Engine/issues)
-- **Documentation**: [Full API documentation](http://localhost:8000/docs) (when running locally)
-- **Live Demo**: [Business Dashboard](http://localhost:8501) (when running locally)
-
----
-
 ## 🔮 Roadmap
 
 ### Upcoming Features
