@@ -1,0 +1,61 @@
+{
+  "model_settings": {
+    "base_model": "gpt-3.5-turbo-1106",
+    "n_epochs": 3,
+    "learning_rate_multiplier": 1.0,
+    "batch_size": 1
+  },
+  "training_data": {
+    "enhanced_similarity_examples": 300,
+    "enhanced_genre_examples": 100,
+    "enhanced_personalized_examples": 200,
+    "contextual_examples": 150,
+    "multiturn_examples": 100,
+    "structured_examples": 100,
+    "evaluation_examples": 50,
+    "total_examples": 1000
+  },
+  "data_filters": {
+    "min_quality_score": 7,
+    "min_reviews": 10,
+    "min_review_score": 0.6,
+    "min_content_richness": 0.6
+  },
+  "output_settings": {
+    "max_tokens": 300,
+    "temperature": 0.7,
+    "top_p": 1.0
+  },
+  "enhancement_features": {
+    "training_improvements": [
+      "enhanced_similarity_matching",
+      "contextual_recommendations", 
+      "multiturn_conversations",
+      "structured_json_outputs",
+      "comparative_analysis",
+      "evaluation_reasoning",
+      "advanced_personalization",
+      "preference_based_scoring"
+    ],
+    "data_quality": [
+      "wilson_confidence_intervals",
+      "sentiment_analysis",
+      "content_richness_scoring",
+      "commercial_viability_analysis",
+      "hierarchical_genre_classification"
+    ],
+    "response_types": [
+      "detailed_explanations",
+      "context_aware_responses",
+      "multi_criteria_analysis",
+      "personalized_insights",
+      "structured_recommendations"
+    ]
+  },
+  "cost_estimation": {
+    "model": "gpt-3.5-turbo-1106",
+    "training_cost_per_1k_tokens": 8.0,
+    "inference_input_cost_per_1k_tokens": 3.0,
+    "inference_output_cost_per_1k_tokens": 6.0
+  }
+}

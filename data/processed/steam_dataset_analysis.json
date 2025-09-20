@@ -1,0 +1,300 @@
+{
+  "basic_info": {
+    "total_games": 83560,
+    "columns": [
+      "AppID",
+      "Name",
+      "Release date",
+      "Estimated owners",
+      "Peak CCU",
+      "Required age",
+      "Price",
+      "DLC count",
+      "About the game",
+      "Supported languages",
+      "Full audio languages",
+      "Reviews",
+      "Header image",
+      "Website",
+      "Support url",
+      "Support email",
+      "Windows",
+      "Mac",
+      "Linux",
+      "Metacritic score",
+      "Metacritic url",
+      "User score",
+      "Positive",
+      "Negative",
+      "Score rank",
+      "Achievements",
+      "Recommendations",
+      "Notes",
+      "Average playtime forever",
+      "Average playtime two weeks",
+      "Median playtime forever",
+      "Median playtime two weeks",
+      "Developers",
+      "Publishers",
+      "Categories",
+      "Genres",
+      "Tags",
+      "Screenshots",
+      "Movies"
+    ],
+    "data_types": {
+      "AppID": "int64",
+      "Name": "object",
+      "Release date": "object",
+      "Estimated owners": "object",
+      "Peak CCU": "int64",
+      "Required age": "int64",
+      "Price": "float64",
+      "DLC count": "int64",
+      "About the game": "object",
+      "Supported languages": "object",
+      "Full audio languages": "object",
+      "Reviews": "object",
+      "Header image": "object",
+      "Website": "object",
+      "Support url": "object",
+      "Support email": "object",
+      "Windows": "bool",
+      "Mac": "bool",
+      "Linux": "bool",
+      "Metacritic score": "int64",
+      "Metacritic url": "object",
+      "User score": "int64",
+      "Positive": "int64",
+      "Negative": "int64",
+      "Score rank": "float64",
+      "Achievements": "int64",
+      "Recommendations": "int64",
+      "Notes": "object",
+      "Average playtime forever": "int64",
+      "Average playtime two weeks": "int64",
+      "Median playtime forever": "int64",
+      "Median playtime two weeks": "int64",
+      "Developers": "object",
+      "Publishers": "object",
+      "Categories": "object",
+      "Genres": "object",
+      "Tags": "object",
+      "Screenshots": "object",
+      "Movies": "object"
+    },
+    "memory_usage": "421.65 MB"
+  },
+  "missing_values": {
+    "AppID": 0,
+    "Name": 6,
+    "Release date": 0,
+    "Estimated owners": 0,
+    "Peak CCU": 0,
+    "Required age": 0,
+    "Price": 0,
+    "DLC count": 0,
+    "About the game": 3437,
+    "Supported languages": 0,
+    "Full audio languages": 0,
+    "Reviews": 73844,
+    "Header image": 0,
+    "Website": 44506,
+    "Support url": 42544,
+    "Support email": 13319,
+    "Windows": 0,
+    "Mac": 0,
+    "Linux": 0,
+    "Metacritic score": 0,
+    "Metacritic url": 79650,
+    "User score": 0,
+    "Positive": 0,
+    "Negative": 0,
+    "Score rank": 83516,
+    "Achievements": 0,
+    "Recommendations": 0,
+    "Notes": 70845,
+    "Average playtime forever": 0,
+    "Average playtime two weeks": 0,
+    "Median playtime forever": 0,
+    "Median playtime two weeks": 0,
+    "Developers": 3457,
+    "Publishers": 3705,
+    "Categories": 4456,
+    "Genres": 3425,
+    "Tags": 19986,
+    "Screenshots": 1926,
+    "Movies": 6300
+  },
+  "summary_stats": {
+    "AppID": {
+      "mean": 1334063.225909526,
+      "median": 1304165.0,
+      "min": 10.0,
+      "max": 2719700.0,
+      "unique_count": 83560
+    },
+    "Peak CCU": {
+      "mean": 136.25508616562948,
+      "median": 0.0,
+      "min": 0.0,
+      "max": 872138.0,
+      "unique_count": 1435
+    },
+    "Required age": {
+      "mean": 0.31656294877932023,
+      "median": 0.0,
+      "min": 0.0,
+      "max": 21.0,
+      "unique_count": 19
+    },
+    "Price": {
+      "mean": 7.195324916227858,
+      "median": 4.49,
+      "min": 0.0,
+      "max": 999.98,
+      "unique_count": 574
+    },
+    "DLC count": {
+      "mean": 0.5517951172809957,
+      "median": 0.0,
+      "min": 0.0,
+      "max": 2366.0,
+      "unique_count": 95
+    },
+    "Metacritic score": {
+      "mean": 3.40826950694112,
+      "median": 0.0,
+      "min": 0.0,
+      "max": 97.0,
+      "unique_count": 73
+    },
+    "User score": {
+      "mean": 0.040557683101962665,
+      "median": 0.0,
+      "min": 0.0,
+      "max": 100.0,
+      "unique_count": 33
+    },
+    "Positive": {
+      "mean": 976.0501914791766,
+      "median": 7.0,
+      "min": 0.0,
+      "max": 5764420.0,
+      "unique_count": 4531
+    },
+    "Negative": {
+      "mean": 162.5223671613212,
+      "median": 2.0,
+      "min": 0.0,
+      "max": 895978.0,
+      "unique_count": 2302
+    },
+    "Score rank": {
+      "mean": 98.9090909090909,
+      "median": 99.0,
+      "min": 97.0,
+      "max": 100.0,
+      "unique_count": 4
+    },
+    "Achievements": {
+      "mean": 20.0837721397798,
+      "median": 0.0,
+      "min": 0.0,
+      "max": 9821.0,
+      "unique_count": 431
+    },
+    "Recommendations": {
+      "mean": 789.4247606510291,
+      "median": 0.0,
+      "min": 0.0,
+      "max": 3441592.0,
+      "unique_count": 4034
+    },
+    "Average playtime forever": {
+      "mean": 106.64120392532313,
+      "median": 0.0,
+      "min": 0.0,
+      "max": 145727.0,
+      "unique_count": 2209
+    },
+    "Average playtime two weeks": {
+      "mean": 10.854930588798467,
+      "median": 0.0,
+      "min": 0.0,
+      "max": 19159.0,
+      "unique_count": 779
+    },
+    "Median playtime forever": {
+      "mean": 95.01659885112494,
+      "median": 0.0,
+      "min": 0.0,
+      "max": 208473.0,
+      "unique_count": 1896
+    },
+    "Median playtime two weeks": {
+      "mean": 11.656498324557205,
+      "median": 0.0,
+      "min": 0.0,
+      "max": 19159.0,
+      "unique_count": 782
+    }
+  },
+  "categorical_analysis": {
+    "Genres": {
+      "non_null_count": 80135,
+      "null_percentage": 4.098851124940163,
+      "sample_values": [
+        "Casual,Indie,Sports",
+        "Action,Indie",
+        "Action,Adventure,Indie,Strategy",
+        "Adventure,Casual,Indie",
+        "Adventure,Indie"
+      ]
+    },
+    "Categories": {
+      "non_null_count": 79104,
+      "null_percentage": 5.332695069411201,
+      "sample_values": [
+        "Single-player,Multi-player,Steam Achievements,Partial Controller Support",
+        "Single-player,Steam Achievements,Full controller support,Steam Leaderboards,Remote Play on Phone,Remote Play on Tablet,Remote Play on TV",
+        "Single-player",
+        "Single-player,Full controller support",
+        "Single-player,Steam Achievements"
+      ]
+    },
+    "Tags": {
+      "non_null_count": 63574,
+      "null_percentage": 23.918142651986596,
+      "sample_values": [
+        "Indie,Casual,Sports,Bowling",
+        "Indie,Action,Pixel Graphics,2D,Retro,Arcade,Score Attack,Minimalist,Comedy,Singleplayer,Fast-Paced,Casual,Funny,Parody,Difficult,Gore,Violent,Western,Controller,Blood",
+        "2D Platformer,Atmospheric,Surreal,Mystery,Puzzle,Survival,Adventure,Linear,Singleplayer,Experimental,Platformer,Precision Platformer,Puzzle-Platformer,2D,Stylized,Physics,Time Manipulation,Casual,Indie",
+        "Indie,Adventure,Nudity,Violent,Sexual Content,Story Rich",
+        "Turn-Based Combat,Massively Multiplayer,Multiplayer,RPG,Tactical RPG,Exploration,PvP,MMORPG,Turn-Based Strategy,God Game,Strategy,2.5D,Magic,Medieval,Mythology,Class-Based,Turn-Based Tactics,Singleplayer,Online Co-Op,Co-op"
+      ]
+    },
+    "Developers": {
+      "non_null_count": 80103,
+      "null_percentage": 4.137146960268071,
+      "sample_values": [
+        "Perpetual FX Creative",
+        "Rusty Moyher",
+        "Campi\u00e3o Games",
+        "Odd Critter Games",
+        "Unusual Games"
+      ]
+    },
+    "Publishers": {
+      "non_null_count": 79855,
+      "null_percentage": 4.433939684059358,
+      "sample_values": [
+        "Perpetual FX Creative",
+        "Wild Rooster",
+        "Campi\u00e3o Games",
+        "Odd Critter Games",
+        "Unusual Games"
+      ]
+    }
+  }
+}
