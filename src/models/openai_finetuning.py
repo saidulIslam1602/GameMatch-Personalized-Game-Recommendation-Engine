@@ -22,10 +22,16 @@ class GameMatchFineTuner:
     """OpenAI fine-tuning pipeline for GameMatch recommendation system"""
     
     def __init__(self, data_dir="data", config_dir="config"):
-        self.data_dir = Path(data_dir)
-        self.config_dir = Path(config_dir)
+        # Handle relative paths from different working directories
+        project_root = Path(__file__).parent.parent.parent
+        self.data_dir = project_root / data_dir if not Path(data_dir).is_absolute() else Path(data_dir)
+        self.config_dir = project_root / config_dir if not Path(config_dir).is_absolute() else Path(config_dir)
         self.processed_dir = self.data_dir / "processed"
         self.models_dir = Path("src/models")
+        
+        # Anti-overfitting measures
+        self.game_usage_counter = {}
+        self.max_game_usage = 5  # Maximum times a game can be used in training
         
         # Load OpenAI API key
         self.api_key = self._load_api_key()
@@ -34,6 +40,32 @@ class GameMatchFineTuner:
         # Create directories
         self.models_dir.mkdir(parents=True, exist_ok=True)
         
+        # Initialize templates
+        self._init_templates()
+    
+    def reset_game_usage_counter(self):
+        """Reset the game usage counter for fresh training data generation"""
+        logger.info("🔄 Resetting game usage counter for balanced data generation")
+        self.game_usage_counter = {}
+    
+    def get_usage_stats(self):
+        """Get current game usage statistics"""
+        if not self.game_usage_counter:
+            return "No games used yet"
+        
+        top_used = sorted(self.game_usage_counter.items(), key=lambda x: x[1], reverse=True)[:10]
+        stats = "Top 10 most used games:\n"
+        for game, count in top_used:
+            stats += f"   • {game}: {count} times\n"
+        
+        total_unique = len(self.game_usage_counter)
+        total_uses = sum(self.game_usage_counter.values())
+        stats += f"\nTotal unique games: {total_unique}, Total uses: {total_uses}"
+        
+        return stats
+    
+    def _init_templates(self):
+        """Initialize all template sets for training data generation"""
         # Enhanced training data templates with context and personalization
         self.recommendation_templates = [
             "Recommend games similar to {game_name}",
@@ -117,15 +149,39 @@ class GameMatchFineTuner:
         
         examples = []
         
-        # Filter games with good quality and reviews
-        quality_games = df[
-            (df['Data_Quality_Score'] >= 7) & 
-            (df['Total_Reviews'] >= 10) &
-            (df['Review_Score'] >= 0.6) &
-            (df['Content_Richness'] >= 0.6)
+        # BALANCED SAMPLING: Use different quality tiers to prevent overfitting
+        high_quality = df[
+            (df['Data_Quality_Score'] >= 8) & 
+            (df['Total_Reviews'] >= 100) &
+            (df['Review_Score'] >= 0.8)
         ].copy()
         
-        logger.info(f"🎮 Using {len(quality_games):,} high-quality games for training")
+        medium_quality = df[
+            (df['Data_Quality_Score'] >= 6) & 
+            (df['Total_Reviews'] >= 20) &
+            (df['Review_Score'] >= 0.6) &
+            (df['Review_Score'] < 0.8)
+        ].copy()
+        
+        diverse_games = df[
+            (df['Data_Quality_Score'] >= 4) & 
+            (df['Total_Reviews'] >= 5) &
+            (df['Review_Score'] >= 0.4)
+        ].copy()
+        
+        # Sample from each tier to ensure diversity
+        high_sample_size = min(len(high_quality), num_examples // 3)
+        medium_sample_size = min(len(medium_quality), num_examples // 3) 
+        diverse_sample_size = min(len(diverse_games), num_examples - high_sample_size - medium_sample_size)
+        
+        high_sample = high_quality.sample(high_sample_size, random_state=42) if high_sample_size > 0 else pd.DataFrame()
+        medium_sample = medium_quality.sample(medium_sample_size, random_state=43) if medium_sample_size > 0 else pd.DataFrame()
+        diverse_sample = diverse_games.sample(diverse_sample_size, random_state=44) if diverse_sample_size > 0 else pd.DataFrame()
+        
+        quality_games = pd.concat([high_sample, medium_sample, diverse_sample]).drop_duplicates(subset=['AppID']).copy()
+        
+        logger.info(f"🎮 Using {len(quality_games):,} balanced games for training")
+        logger.info(f"   • High quality: {len(high_sample)}, Medium: {len(medium_sample)}, Diverse: {len(diverse_sample)}")
         
         for i in range(num_examples):
             try:
@@ -794,7 +850,8 @@ class GameMatchFineTuner:
         return examples
     
     def _find_similar_games(self, base_game: pd.Series, games_df: pd.DataFrame, top_k=5) -> pd.DataFrame:
-        """Find games similar to the base game"""
+        """Find games similar to the base game with anti-overfitting measures"""
+        import random
         
         # Calculate similarity based on multiple factors
         similarities = []
@@ -805,6 +862,12 @@ class GameMatchFineTuner:
         
         for idx, game in games_df.iterrows():
             if game['AppID'] == base_game['AppID']:  # Skip same game
+                continue
+            
+            game_name = game['Name']
+            
+            # ANTI-OVERFITTING: Skip if game used too frequently
+            if self.game_usage_counter.get(game_name, 0) >= self.max_game_usage:
                 continue
             
             similarity_score = 0
@@ -828,17 +891,46 @@ class GameMatchFineTuner:
                 price_similarity = 1 - (price_diff / (max_price + 10))  # Add 10 to prevent division issues
                 similarity_score += price_similarity * 0.2
             
-            # Quality bonus
+            # BALANCED Quality bonus - reduced impact to prevent same games
             if game['Review_Score'] >= 0.7:
-                similarity_score += 0.1
+                similarity_score += 0.05  # Reduced from 0.1
+            
+            # DIVERSITY PENALTY: Reduce score for frequently used games
+            usage_count = self.game_usage_counter.get(game_name, 0)
+            diversity_penalty = usage_count * 0.02
+            similarity_score -= diversity_penalty
+            
+            # Add randomness to break ties and increase diversity
+            random_factor = random.uniform(-0.05, 0.05)
+            similarity_score += random_factor
             
             similarities.append((idx, similarity_score))
         
+        # If no games available due to usage limits, temporarily relax constraints
+        if len(similarities) < top_k:
+            temp_max = self.max_game_usage + 3
+            for idx, game in games_df.iterrows():
+                if game['AppID'] == base_game['AppID']:
+                    continue
+                
+                game_name = game['Name']
+                if self.game_usage_counter.get(game_name, 0) < temp_max:
+                    # Add with baseline similarity to ensure we have enough games
+                    similarity_score = random.uniform(0.3, 0.6)
+                    similarities.append((idx, similarity_score))
+        
         # Sort by similarity and return top k
         similarities.sort(key=lambda x: x[1], reverse=True)
-        top_indices = [idx for idx, _ in similarities[:top_k]]
+        top_indices = [idx for idx, _ in similarities[:min(top_k, len(similarities))]]
         
-        return games_df.loc[top_indices]
+        result_games = games_df.loc[top_indices]
+        
+        # TRACK USAGE: Update counter for selected games
+        for _, game in result_games.iterrows():
+            game_name = game['Name']
+            self.game_usage_counter[game_name] = self.game_usage_counter.get(game_name, 0) + 1
+        
+        return result_games
     
     def _create_recommendation_response(self, base_game: pd.Series, similar_games: pd.DataFrame, all_games: pd.DataFrame) -> str:
         """Create a detailed recommendation response"""
