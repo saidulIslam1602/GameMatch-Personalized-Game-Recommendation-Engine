@@ -8,19 +8,27 @@ class GameMatchDashboard {
         this.apiBase = '/api';
         this.currentQuery = '';
         this.isLoading = false;
-        this.charts = {};
+        // Charts removed for better performance
         
         this.init();
     }
     
     init() {
-        console.log('Initializing GameMatch Dashboard...');
-        this.debugElements();
+        if (this.isDebugMode()) {
+            console.log('Initializing GameMatch Dashboard...');
+            this.debugElements();
+        }
         this.bindEvents();
         this.loadInitialData();
     }
     
+    isDebugMode() {
+        return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.DEBUG_MODE === true;
+    }
+    
     debugElements() {
+        if (!this.isDebugMode()) return;
+        
         console.log('Checking for required elements:');
         console.log('- Search form:', document.getElementById('searchForm'));
         console.log('- Search input:', document.getElementById('searchInput'));
@@ -120,23 +128,29 @@ class GameMatchDashboard {
     }
     
     loadStats() {
-        console.log('Loading stats from:', this.apiBase + '/stats');
+        if (this.isDebugMode()) {
+            console.log('Loading stats from:', this.apiBase + '/stats');
+        }
         
         fetch(this.apiBase + '/stats')
             .then(response => {
-                console.log('Stats response status:', response.status);
+                if (this.isDebugMode()) {
+                    console.log('Stats response status:', response.status);
+                }
                 if (!response.ok) {
                     throw new Error('HTTP error! status: ' + response.status);
                 }
                 return response.json();
             })
             .then(data => {
-                console.log('Stats data received:', data);
-                console.log('Total games:', data.total_games);
+                if (this.isDebugMode()) {
+                    console.log('Stats data received:', data);
+                    console.log('Total games:', data.total_games);
+                }
                 
                 this.renderStats(data);
                 this.statsData = data;
-                this.attemptChartCreation();
+                // Charts removed for better performance
             })
             .catch(error => {
                 console.error('Error loading stats:', error);
@@ -147,72 +161,9 @@ class GameMatchDashboard {
             });
     }
     
-    attemptChartCreation() {
-        console.log('Attempting chart creation. Chart available:', typeof Chart !== 'undefined', 'ChartJS Ready:', window.chartJsReady, 'Stats data:', !!this.statsData);
-        
-        // Check both Chart availability and our global flag
-        if ((typeof Chart !== 'undefined' || window.chartJsReady) && this.statsData) {
-            console.log('Chart.js is available, creating charts...');
-            this.createCharts(this.statsData);
-        } else {
-            console.log('Chart.js not available or no stats data, retrying...');
-            
-            // Set up a more aggressive retry mechanism
-            let attempts = 0;
-            const maxAttempts = 10;
-            
-            const retryCharts = () => {
-                attempts++;
-                console.log('Chart creation attempt', attempts, 'of', maxAttempts);
-                console.log('- Chart available:', typeof Chart !== 'undefined');
-                console.log('- ChartJS Ready flag:', window.chartJsReady);
-                console.log('- Stats data available:', !!this.statsData);
-                
-                if ((typeof Chart !== 'undefined' || window.chartJsReady) && this.statsData) {
-                    console.log('Success! Creating charts on attempt', attempts);
-                    this.createCharts(this.statsData);
-                    return;
-                }
-                
-                if (attempts < maxAttempts) {
-                    setTimeout(retryCharts, 500); // Faster retries
-                } else {
-                    console.error('Failed to create charts after', maxAttempts, 'attempts');
-                    // Try one more time with direct Chart access
-                    if (this.statsData) {
-                        console.log('Final attempt: trying to create charts anyway...');
-                        try {
-                            this.createCharts(this.statsData);
-                        } catch (error) {
-                            console.error('Final chart creation failed:', error);
-                            this.showChartError();
-                        }
-                    } else {
-                        this.showChartError();
-                    }
-                }
-            };
-            
-            setTimeout(retryCharts, 500);
-        }
-    }
+    // Chart methods removed for better performance
     
-    showChartError() {
-        console.log('Showing chart error message');
-        const chartsSection = document.querySelector('.games-section h3');
-        if (chartsSection && chartsSection.textContent.includes('Analytics Dashboard')) {
-            chartsSection.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Analytics Dashboard (Charts failed to load - <button onclick="refreshCharts()" style="background:none;border:none;color:var(--primary-color);text-decoration:underline;cursor:pointer;">Retry</button>)';
-        } else {
-            // Try to find any element with "Analytics" in it
-            const allElements = document.querySelectorAll('*');
-            for (let element of allElements) {
-                if (element.textContent && element.textContent.includes('Analytics Dashboard')) {
-                    element.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Analytics Dashboard (Charts failed to load - <button onclick="refreshCharts()" style="background:none;border:none;color:var(--primary-color);text-decoration:underline;cursor:pointer;">Retry</button>)';
-                    break;
-                }
-            }
-        }
-    }
+    // Chart error handling removed
     
     loadSampleGames() {
         console.log('Loading games by browsing API...');
@@ -300,123 +251,7 @@ class GameMatchDashboard {
         statsContainer.innerHTML = '<div class="stat-card"><h3><i class="fas fa-gamepad"></i> Total Games</h3><div class="stat-number">' + (data.total_games || 0).toLocaleString() + '</div></div><div class="stat-card"><h3><i class="fas fa-tags"></i> Genres</h3><div class="stat-number">' + Object.keys(data.genre_stats || {}).length + '</div></div><div class="stat-card"><h3><i class="fas fa-star"></i> Avg Rating</h3><div class="stat-number">85%</div></div><div class="stat-card"><h3><i class="fas fa-dollar-sign"></i> Free Games</h3><div class="stat-number">' + ((data.price_distribution && data.price_distribution['$0-5']) || 0).toLocaleString() + '</div></div>';
     }
     
-    createCharts(data) {
-        console.log('Creating charts with data:', data);
-        
-        if (!data) {
-            console.error('No data provided for charts');
-            return;
-        }
-        
-        if (data.genre_stats) {
-            this.createGenreChart(data.genre_stats);
-        }
-        
-        if (data.price_distribution) {
-            this.createPriceChart(data.price_distribution);
-        }
-        
-        if (data.rating_distribution) {
-            this.createRatingChart(data.rating_distribution);
-        }
-    }
-    
-    createGenreChart(genreStats) {
-        const ctx = document.getElementById('genreChart');
-        if (!ctx) return;
-        
-        const labels = Object.keys(genreStats).slice(0, 10);
-        const values = Object.values(genreStats).slice(0, 10);
-        
-        if (this.charts.genre) {
-            this.charts.genre.destroy();
-        }
-        
-        this.charts.genre = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: labels,
-                datasets: [{
-                    data: values,
-                    backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384']
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom'
-                    }
-                }
-            }
-        });
-    }
-    
-    createPriceChart(priceDistribution) {
-        const ctx = document.getElementById('priceChart');
-        if (!ctx) return;
-        
-        const labels = Object.keys(priceDistribution);
-        const values = Object.values(priceDistribution);
-        
-        if (this.charts.price) {
-            this.charts.price.destroy();
-        }
-        
-        this.charts.price = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Number of Games',
-                    data: values,
-                    backgroundColor: '#36A2EB'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
-            }
-        });
-    }
-    
-    createRatingChart(ratingDistribution) {
-        const ctx = document.getElementById('ratingChart');
-        if (!ctx) return;
-        
-        const labels = Object.keys(ratingDistribution);
-        const values = Object.values(ratingDistribution);
-        
-        if (this.charts.rating) {
-            this.charts.rating.destroy();
-        }
-        
-        this.charts.rating = new Chart(ctx, {
-            type: 'pie',
-            data: {
-                labels: labels,
-                datasets: [{
-                    data: values,
-                    backgroundColor: ['#FF6384', '#FFCE56', '#4BC0C0', '#36A2EB', '#9966FF']
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom'
-                    }
-                }
-            }
-        });
-    }
+    // All chart creation methods removed for better performance
     
     renderGamesSection(games, title, sectionId) {
         if (!sectionId) sectionId = 'main';
@@ -438,8 +273,8 @@ class GameMatchDashboard {
             return;
         }
         
-        // Create section HTML
-        const sectionHtml = '<div class="games-section-wrapper" id="section-' + sectionId + '" style="margin-bottom: 2rem;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"><h3><i class="fas fa-gamepad"></i> ' + title + '</h3><button onclick="dashboardInstance.loadMoreGames(\'' + sectionId + '\')" class="btn-secondary" style="padding: 0.5rem 1rem; background: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer;"><i class="fas fa-plus"></i> Load More</button></div><div class="games-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem;">' + this.renderGameCards(games) + '</div></div>';
+        // Create section HTML with data-current-page attribute
+        const sectionHtml = '<div class="games-section-wrapper" id="section-' + sectionId + '" data-current-page="1" style="margin-bottom: 2rem;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"><h3><i class="fas fa-gamepad"></i> ' + title + '</h3><button onclick="dashboardInstance.loadMoreGames(\'' + sectionId + '\')" class="btn-secondary load-more-btn" style="padding: 0.5rem 1rem; background: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer;"><i class="fas fa-plus"></i> Load More</button></div><div class="games-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem;">' + this.renderGameCards(games) + '</div></div>';
         
         // Add section to container
         gamesContainer.insertAdjacentHTML('beforeend', sectionHtml);
@@ -452,15 +287,21 @@ class GameMatchDashboard {
             const reviews = game.total_reviews.toLocaleString();
             const genre = game.genres.split(',')[0];
             
-            // Create fallback image if header_image is not available
+            // Create image with simple fallback
             let imageHtml = '';
-            if (game.header_image && game.header_image.trim() !== '' && game.header_image !== 'null') {
-                // Clean the image URL and add proper error handling
-                const cleanImageUrl = game.header_image.replace(/['"]/g, '');
-                imageHtml = '<img src="' + cleanImageUrl + '" alt="' + game.name.replace(/['"]/g, '') + '" style="width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.3s;" onload="this.style.opacity=1; console.log(\'Image loaded:\', this.src);" onerror="console.log(\'Image failed:\', this.src); this.style.display=\'none\'; this.parentElement.querySelector(\'.fallback-text\').style.display=\'flex\';">';
-                imageHtml += '<div class="fallback-text" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:white;font-size:0.9rem;text-align:center;padding:1rem;background:rgba(0,0,0,0.3);">' + game.name + '</div>';
+            if (game.header_image && game.header_image.trim() !== '' && game.header_image !== 'null' && game.header_image !== 'undefined') {
+                // Clean and validate the image URL
+                const cleanImageUrl = game.header_image.trim().replace(/['"]/g, '');
+                if (cleanImageUrl.startsWith('http')) {
+                    console.log('🖼️ Creating image for:', game.name, 'URL:', cleanImageUrl);
+                    imageHtml = '<img src="' + cleanImageUrl + '" alt="' + game.name.replace(/['"]/g, '') + '" style="width: 100%; height: 100%; object-fit: cover;" onload="console.log(\'✅ Image loaded:\', \'' + game.name + '\')" onerror="console.log(\'❌ Image failed:\', \'' + game.name + '\'); this.style.display=\'none\'; this.parentElement.style.background=\'#f5f5f5\'; this.parentElement.innerHTML=\'<div style=\\\"display:flex;align-items:center;justify-content:center;height:100%;color:#666;font-size:0.9rem;text-align:center;padding:1rem;\\\">' + game.name + '</div>\';">';
+                } else {
+                    console.log('⚠️ Invalid image URL for:', game.name);
+                    imageHtml = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#666;font-size:0.9rem;text-align:center;padding:1rem;background:#f5f5f5;">' + game.name + '</div>';
+                }
             } else {
-                imageHtml = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:white;font-size:0.9rem;text-align:center;padding:1rem;">' + game.name + '</div>';
+                console.log('❌ No image for:', game.name);
+                imageHtml = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#666;font-size:0.9rem;text-align:center;padding:1rem;background:#f5f5f5;">' + game.name + '</div>';
             }
             
             return '<div class="game-card" style="background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; transition: transform 0.2s; cursor: pointer;" onclick="dashboardInstance.showGameDetails(' + game.app_id + ')" onmouseenter="this.style.transform=\'translateY(-4px)\'" onmouseleave="this.style.transform=\'translateY(0)\'"><div class="game-image" style="height: 150px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); position: relative; overflow: hidden;">' + imageHtml + '<div style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.7); color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem;">' + price + '</div></div><div style="padding: 1rem;"><h4 style="margin: 0 0 0.5rem 0; font-size: 1.1rem; color: #333; line-height: 1.3;">' + game.name + '</h4><div style="display: flex; align-items: center; margin-bottom: 0.5rem;"><div style="display: flex; align-items: center; margin-right: 1rem;"><i class="fas fa-star" style="color: #ffd700; margin-right: 4px;"></i><span style="font-size: 0.9rem; color: #666;">' + rating + '</span></div><div style="font-size: 0.8rem; color: #888;">' + reviews + ' reviews</div></div><div style="margin-bottom: 0.5rem;"><span style="font-size: 0.8rem; background: #e3f2fd; color: #1976d2; padding: 2px 6px; border-radius: 3px; margin-right: 4px;">' + genre + '</span></div><p style="margin: 0; font-size: 0.9rem; color: #666; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">' + game.description + '</p><div style="margin-top: 0.5rem; font-size: 0.8rem; color: #888;">' + game.developer + ' • ' + game.release_date + '</div></div></div>';
@@ -494,16 +335,22 @@ class GameMatchDashboard {
     }
     
     loadMoreGames(sectionId) {
-        console.log('Loading more games for section:', sectionId);
+        console.log('🔄 Load More clicked for section:', sectionId);
         
         // Find existing section and append more games
         const existingSection = document.getElementById('section-' + sectionId);
         if (existingSection) {
+            console.log('✅ Found section:', existingSection);
             const gamesGrid = existingSection.querySelector('.games-grid');
             if (gamesGrid) {
+                console.log('✅ Found games grid, current games:', gamesGrid.children.length);
                 // Load more games and append to existing grid
                 this.loadAndAppendGames(sectionId, gamesGrid);
+            } else {
+                console.error('❌ Games grid not found in section');
             }
+        } else {
+            console.error('❌ Section not found:', 'section-' + sectionId);
         }
     }
     
@@ -512,18 +359,70 @@ class GameMatchDashboard {
         if (sectionId === 'action') genre = 'Action';
         else if (sectionId === 'adventure') genre = 'Adventure';  
         else if (sectionId === 'indie') genre = 'Indie';
+        else if (sectionId === 'legacy') genre = 'popular'; // Handle search results
         
-        if (!genre) return;
+        if (!genre) {
+            console.warn('Unknown section ID:', sectionId);
+            return;
+        }
         
-        fetch(this.apiBase + '/games/browse?genre=' + genre + '&limit=10&rating_range=good&page=2')
-            .then(response => response.json())
+        // Get current page number from the section or default to 2
+        const section = document.getElementById('section-' + sectionId);
+        let currentPage = parseInt(section.dataset.currentPage || '1') + 1;
+        section.dataset.currentPage = currentPage;
+        
+        console.log('📄 Loading page', currentPage, 'for', genre, 'games');
+        
+        // Show loading state
+        const loadMoreBtn = section.querySelector('.load-more-btn');
+        if (loadMoreBtn) {
+            loadMoreBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+            loadMoreBtn.disabled = true;
+        }
+        
+        const url = genre === 'popular' ? 
+            this.apiBase + '/games/browse?limit=10&rating_range=good&page=' + currentPage :
+            this.apiBase + '/games/browse?genre=' + genre + '&limit=10&rating_range=good&page=' + currentPage;
+        
+        console.log('🌐 Fetching more games from:', url);
+        
+        fetch(url)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok: ' + response.status);
+                }
+                return response.json();
+            })
             .then(data => {
+                console.log('📦 Received data:', data);
                 if (data.games && data.games.length > 0) {
+                    console.log('✅ Adding', data.games.length, 'games to grid');
                     gamesGrid.insertAdjacentHTML('beforeend', this.renderGameCards(data.games));
+                    console.log('✅ Total games now:', gamesGrid.children.length);
+                } else {
+                    console.log('⚠️ No more games available for', genre);
+                    if (loadMoreBtn) {
+                        loadMoreBtn.innerHTML = 'No more games';
+                        loadMoreBtn.disabled = true;
+                        setTimeout(() => {
+                            loadMoreBtn.style.display = 'none';
+                        }, 2000);
+                    }
+                    return;
+                }
+                
+                // Reset button state
+                if (loadMoreBtn) {
+                    loadMoreBtn.innerHTML = '<i class="fas fa-plus"></i> Load More';
+                    loadMoreBtn.disabled = false;
                 }
             })
             .catch(error => {
                 console.error('Error loading more games:', error);
+                if (loadMoreBtn) {
+                    loadMoreBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error - Try Again';
+                    loadMoreBtn.disabled = false;
+                }
             });
     }
     
@@ -589,32 +488,8 @@ window.forceRefreshDashboard = function() {
 };
 
 // Global function to refresh charts
-function refreshCharts() {
-    console.log('Manual chart refresh triggered');
-    if (dashboardInstance) {
-        console.log('Reloading stats and attempting chart creation...');
-        dashboardInstance.loadStats();
-        
-        // Force chart creation after a delay
-        setTimeout(function() {
-            if (dashboardInstance.statsData) {
-                console.log('Forcing chart creation with existing data...');
-                dashboardInstance.createCharts(dashboardInstance.statsData);
-            }
-        }, 1000);
-    } else {
-        console.error('Dashboard instance not available');
-    }
-}
+// Chart refresh function removed for better performance
 
-// Global function to test chart availability
-window.testCharts = function() {
-    console.log('Chart.js available:', typeof Chart !== 'undefined');
-    console.log('Dashboard instance:', !!dashboardInstance);
-    console.log('Stats data:', dashboardInstance ? !!dashboardInstance.statsData : 'No instance');
-    
-    if (dashboardInstance && dashboardInstance.statsData) {
-        console.log('Attempting manual chart creation...');
-        dashboardInstance.createCharts(dashboardInstance.statsData);
-    }
-};
+// Chart retry function removed for better performance
+
+// Chart test function removed for better performance

@@ -72,24 +72,34 @@ cp config/openai_key.example.txt config/openai_key.txt
 python3 -c "from src.models.mlops_monitoring import RecommendationTracker; RecommendationTracker()"
 ```
 
-### 🌐 Launch Production API
+### 🚀 Launch Complete System
 
 ```bash
-# Start the FastAPI server
-python3 run_production_api.py
+# Launch both API and User Dashboard (Recommended)
+python3 start_services.py
 
-# Access the API
-# Interactive docs: http://localhost:8000/docs
-# Health check: http://localhost:8000/health
+# Launch only API server
+python3 start_services.py --api
+
+# Launch only User Dashboard
+python3 start_services.py --dash
+
+# Full setup validation + launch
+python3 quick_start.py
 ```
 
-### 📊 Launch Business Dashboard
+### 🌐 Access Your Services
 
 ```bash
-# Start the Streamlit dashboard
-python3 run_dashboard.py
+# User Dashboard (Game Recommendations)
+http://localhost:5000
 
-# Access dashboard: http://localhost:8501
+# API Server & Documentation
+http://localhost:8000
+http://localhost:8000/docs
+
+# Executive Dashboard
+python3 run_dashboard.py  # Separate executive dashboard
 ```
 
 ---

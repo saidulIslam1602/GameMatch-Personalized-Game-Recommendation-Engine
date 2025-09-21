@@ -6,7 +6,7 @@ Enterprise-grade FastAPI microservice for game recommendations
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import Dict, List, Optional, Union
 import pandas as pd
 import numpy as np
@@ -17,19 +17,37 @@ from datetime import datetime
 from pathlib import Path
 import sys
 import os
+import hashlib
+import secrets
+from collections import defaultdict, deque
+from functools import wraps
 
 # Add src to path
 sys.path.append(str(Path(__file__).parent.parent))
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Load environment variables from .env file if it exists
+try:
+    from dotenv import load_dotenv
+    project_root = Path(__file__).parent.parent.parent
+    env_file = project_root / '.env'
+    if env_file.exists():
+        load_dotenv(env_file)
+        logger.info("Loaded environment variables from .env file")
+except ImportError:
+    logger.info("python-dotenv not available, using system environment variables only")
+
+# Global startup time for health checks
+startup_time = time.time()
 
 # Import GameMatch components
 from models.advanced_rag_system import EnhancedRAGSystem
 from models.gaming_ontology import GamingOntologySystem
 from models.mlops_monitoring import RecommendationTracker, PerformanceMonitor
 from data.dataset_loader import GameMatchDataLoader
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -47,13 +65,17 @@ app = FastAPI(
     },
 )
 
-# CORS middleware
+# CORS middleware with environment-based configuration
+allowed_origins = os.getenv('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:5000,http://localhost:8000').split(',')
+if os.getenv('ENVIRONMENT') == 'development':
+    allowed_origins.append('*')  # Allow all origins in development
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure for production
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Security
@@ -66,16 +88,40 @@ tracker: RecommendationTracker = None
 monitor: PerformanceMonitor = None
 games_df: pd.DataFrame = None
 
+# Rate limiting storage
+rate_limit_storage = defaultdict(deque)
+RATE_LIMIT_REQUESTS = int(os.getenv('API_RATE_LIMIT', '100'))
+RATE_LIMIT_WINDOW = 60  # 1 minute window
+
 # === API Models ===
 
 class GameRequest(BaseModel):
-    """Request model for game recommendations"""
-    query: str = Field(..., description="Natural language query for game recommendations")
-    user_id: Optional[str] = Field(None, description="User ID for personalization")
+    """Request model for game recommendations with enhanced validation"""
+    query: str = Field(..., min_length=2, max_length=500, description="Natural language query for game recommendations")
+    user_id: Optional[str] = Field(None, max_length=100, description="User ID for personalization")
     max_results: int = Field(10, ge=1, le=50, description="Maximum number of recommendations")
     filters: Optional[Dict] = Field(None, description="Additional filters (genre, price, rating, etc.)")
     strategy: str = Field("hybrid_search", description="Retrieval strategy")
     include_reasoning: bool = Field(True, description="Include detailed reasoning in response")
+    
+    @validator('query')
+    def validate_query(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Query cannot be empty')
+        # Basic XSS prevention
+        dangerous_chars = ['<', '>', 'script', 'javascript:', 'onload', 'onerror']
+        v_lower = v.lower()
+        for char in dangerous_chars:
+            if char in v_lower:
+                raise ValueError('Query contains potentially dangerous content')
+        return v.strip()
+    
+    @validator('strategy')
+    def validate_strategy(cls, v):
+        allowed_strategies = ['hybrid_search', 'semantic_search', 'categorical_filter', 'collaborative_filter']
+        if v not in allowed_strategies:
+            raise ValueError(f'Strategy must be one of: {", ".join(allowed_strategies)}')
+        return v
 
 class GameRecommendation(BaseModel):
     """Individual game recommendation"""
@@ -119,18 +165,57 @@ class HealthCheck(BaseModel):
     database_status: str
     model_status: str
 
+# === Rate Limiting ===
+
+def rate_limit_check(api_key: str) -> bool:
+    """Check if API key has exceeded rate limit"""
+    now = time.time()
+    key_requests = rate_limit_storage[api_key]
+    
+    # Remove old requests outside the window
+    while key_requests and key_requests[0] < now - RATE_LIMIT_WINDOW:
+        key_requests.popleft()
+    
+    # Check if limit exceeded
+    if len(key_requests) >= RATE_LIMIT_REQUESTS:
+        return False
+    
+    # Add current request
+    key_requests.append(now)
+    return True
+
 # === Authentication ===
 
 async def get_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Validate API key"""
-    # In production, validate against database/service
-    valid_keys = {"gamematch-api-key-2024", "demo-key-for-testing"}
+    """Validate API key using environment-based configuration with rate limiting"""
+    # Get valid API keys from environment or use secure defaults
+    env_api_keys = os.getenv('VALID_API_KEYS', '')
+    if env_api_keys:
+        valid_keys = set(env_api_keys.split(','))
+    else:
+        # Generate a secure default key if none provided
+        default_key = os.getenv('DEFAULT_API_KEY', secrets.token_urlsafe(32))
+        valid_keys = {default_key}
+        logger.warning(f"Using generated API key: {default_key}")
     
-    if credentials.credentials not in valid_keys:
+    # Hash the provided key for secure comparison
+    provided_key_hash = hashlib.sha256(credentials.credentials.encode()).hexdigest()
+    valid_key_hashes = {hashlib.sha256(key.encode()).hexdigest() for key in valid_keys}
+    
+    if provided_key_hash not in valid_key_hashes:
+        logger.warning(f"Invalid API key attempt from credentials")
         raise HTTPException(
             status_code=401,
             detail="Invalid API key"
         )
+    
+    # Check rate limit
+    if not rate_limit_check(credentials.credentials):
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded. Maximum {RATE_LIMIT_REQUESTS} requests per minute."
+        )
+    
     return credentials.credentials
 
 # === Startup/Shutdown Events ===
@@ -143,27 +228,49 @@ async def startup_event():
     logger.info("🚀 Starting GameMatch API...")
     
     try:
-        # Load dataset
+        # Load dataset with optimized performance
         logger.info("📦 Loading Steam games dataset...")
         data_loader = GameMatchDataLoader()
-        games_df = data_loader.load_processed_data("data/processed/steam_games_processed.parquet")
-        logger.info(f"✅ Loaded {len(games_df):,} games")
+        
+        # Use environment variable to control dataset size for faster startup
+        dataset_limit = int(os.getenv('STARTUP_DATASET_LIMIT', '5000'))
+        
+        try:
+            games_df = data_loader.load_processed_data("data/processed/steam_games_processed.parquet")
+            logger.info(f"✅ Loaded {len(games_df):,} games")
+        except FileNotFoundError:
+            logger.warning("Processed dataset not found, using fallback")
+            games_df = pd.DataFrame()  # Fallback to empty dataset
         
         # Initialize gaming ontology
         logger.info("🧠 Initializing gaming ontology...")
-        ontology_system = GamingOntologySystem()
-        logger.info("✅ Gaming ontology ready")
+        try:
+            ontology_system = GamingOntologySystem()
+            logger.info("✅ Gaming ontology ready")
+        except Exception as e:
+            logger.error(f"Failed to initialize ontology: {e}")
+            ontology_system = None
         
-        # Initialize RAG system
+        # Initialize RAG system with optimized dataset size
         logger.info("🔍 Building RAG knowledge base...")
-        rag_system = EnhancedRAGSystem(games_df.sample(n=min(5000, len(games_df))))
-        logger.info("✅ RAG system ready")
+        if len(games_df) > 0:
+            sample_size = min(dataset_limit, len(games_df))
+            rag_system = EnhancedRAGSystem(games_df.sample(n=sample_size))
+            logger.info(f"✅ RAG system ready with {sample_size} games")
+        else:
+            logger.warning("No games data available, RAG system disabled")
+            rag_system = None
         
-        # Initialize monitoring
+        # Initialize monitoring (optional if database not available)
         logger.info("📊 Initializing MLOps monitoring...")
-        tracker = RecommendationTracker()
-        monitor = PerformanceMonitor(tracker)
-        logger.info("✅ Monitoring systems ready")
+        try:
+            tracker = RecommendationTracker()
+            monitor = PerformanceMonitor(tracker)
+            logger.info("✅ Monitoring systems ready")
+        except Exception as e:
+            logger.warning(f"⚠️  Monitoring system disabled: {e}")
+            tracker = None
+            monitor = None
         
         logger.info("🎉 GameMatch API fully initialized!")
         
@@ -190,13 +297,18 @@ async def health_check():
         "monitoring": tracker is not None and monitor is not None,
     }
     
-    # Test database connection
-    db_status = "connected"
+    # Test database connection with proper error handling
+    db_status = "disconnected" if tracker is None else "connected"
     try:
-        if tracker:
+        if tracker and hasattr(tracker, '_get_connection') and tracker.connection_string:
             # Simple connection test
-            _ = tracker._get_connection()
-    except Exception:
+            with tracker._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1")
+                cursor.close()
+            db_status = "connected"
+    except Exception as e:
+        logger.warning(f"Database health check failed: {e}")
         db_status = "disconnected"
     
     processing_time = (time.time() - start_time) * 1000
@@ -204,7 +316,7 @@ async def health_check():
     return HealthCheck(
         status="healthy" if all(components.values()) else "degraded",
         version="2.1.0",
-        uptime_seconds=time.time() - startup_time if 'startup_time' in globals() else 0.0,
+        uptime_seconds=time.time() - startup_time,
         components=components,
         database_status=db_status,
         model_status="ready" if rag_system else "loading"
@@ -230,17 +342,37 @@ async def get_recommendations(
     start_time = time.time()
     
     try:
+        # Validate system availability
         if not rag_system:
-            raise HTTPException(status_code=503, detail="RAG system not initialized")
+            logger.error("RAG system not available for recommendation request")
+            raise HTTPException(
+                status_code=503, 
+                detail="Recommendation system temporarily unavailable. Please try again later."
+            )
         
-        # Query RAG system
-        rag_context = rag_system.query(
-            query=request.query,
-            strategy=request.strategy,
-            top_k=request.max_results,
-            filters=request.filters,
-            return_context=True
-        )
+        # Additional validation
+        if not games_df or len(games_df) == 0:
+            logger.error("No games data available")
+            raise HTTPException(
+                status_code=503,
+                detail="Game database not available. Please try again later."
+            )
+        
+        # Query RAG system with error handling
+        try:
+            rag_context = rag_system.query(
+                query=request.query,
+                strategy=request.strategy,
+                top_k=request.max_results,
+                filters=request.filters,
+                return_context=True
+            )
+        except Exception as e:
+            logger.error(f"RAG system query failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to process recommendation request. Please try again."
+            )
         
         # Convert RAG results to API format
         recommendations = []

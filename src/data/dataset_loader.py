@@ -29,6 +29,28 @@ class GameMatchDataLoader:
         # Create directories
         self.raw_dir.mkdir(parents=True, exist_ok=True)
         self.processed_dir.mkdir(parents=True, exist_ok=True)
+    
+    def load_processed_data(self, file_path: str) -> pd.DataFrame:
+        """Load processed data from parquet file"""
+        full_path = Path(file_path)
+        if not full_path.is_absolute():
+            full_path = self.data_dir.parent / file_path
+        
+        if not full_path.exists():
+            logger.error(f"Processed data file not found: {full_path}")
+            # Try to load and process raw data as fallback
+            logger.info("Attempting to load and process raw data...")
+            df = self.load_steam_games(save_raw=True)
+            processed_df = self.preprocess_steam_data(df)
+            # Save processed data
+            processed_df.to_parquet(full_path)
+            logger.info(f"Processed data saved to {full_path}")
+            return processed_df
+        
+        logger.info(f"Loading processed data from {full_path}")
+        df = pd.read_parquet(full_path)
+        logger.info(f"Loaded {len(df):,} processed games")
+        return df
         
     def load_steam_games(self, save_raw=True) -> pd.DataFrame:
         """Load Steam games dataset from Hugging Face"""

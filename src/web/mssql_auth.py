@@ -9,6 +9,7 @@ import hashlib
 import secrets
 import json
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional, Any
 
@@ -17,13 +18,17 @@ logger = logging.getLogger(__name__)
 class MSSQLUserAuth:
     """Microsoft SQL Server-based user authentication and management system"""
     
-    def __init__(self, server="localhost", port=1433, database="gamematch", 
-                 username="sa", password="GameMatch2024!"):
-        self.server = server
-        self.port = port
-        self.database = database
-        self.username = username
-        self.password = password
+    def __init__(self, server=None, port=None, database=None, 
+                 username=None, password=None):
+        # Use environment variables with secure defaults
+        self.server = server or os.getenv('MSSQL_SERVER', 'localhost')
+        self.port = port or int(os.getenv('MSSQL_PORT', '1433'))
+        self.database = database or os.getenv('MSSQL_DATABASE', 'gamematch')
+        self.username = username or os.getenv('MSSQL_USERNAME', 'sa')
+        self.password = password or os.getenv('MSSQL_PASSWORD')
+        
+        if not self.password:
+            raise ValueError("MSSQL_PASSWORD environment variable is required")
         self.connection_string = self._build_connection_string()
         self.init_database()
     

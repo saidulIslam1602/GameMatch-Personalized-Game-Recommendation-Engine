@@ -8,6 +8,7 @@ import numpy as np
 import json
 import time
 import logging
+import os
 from typing import Dict, List, Tuple, Optional, Any
 from pathlib import Path
 from dataclasses import dataclass, asdict
@@ -83,15 +84,27 @@ class BusinessMetrics:
 class RecommendationTracker:
     """Track recommendation performance and user feedback"""
     
-    def __init__(self, server: str = "localhost", port: int = 1433, database: str = "gamematch", 
-                 username: str = "sa", password: str = "GameMatch2024!"):
-        self.server = server
-        self.port = port
-        self.database = database
-        self.username = username
-        self.password = password
-        self.connection_string = self._build_connection_string()
-        self._init_database()
+    def __init__(self, server: str = None, port: int = None, database: str = None, 
+                 username: str = None, password: str = None):
+        # Use environment variables with secure defaults
+        self.server = server or os.getenv('MSSQL_SERVER', 'localhost')
+        self.port = port or int(os.getenv('MSSQL_PORT', '1433'))
+        self.database = database or os.getenv('MSSQL_DATABASE', 'gamematch')
+        self.username = username or os.getenv('MSSQL_USERNAME', 'sa')
+        self.password = password or os.getenv('MSSQL_PASSWORD')
+        
+        if not self.password:
+            logger.warning("MSSQL_PASSWORD not set, monitoring will be disabled")
+            self.password = None
+            self.connection_string = None
+        else:
+            try:
+                self.connection_string = self._build_connection_string()
+                self._init_database()
+                logger.info("Database monitoring initialized successfully")
+            except Exception as e:
+                logger.warning(f"Database initialization failed: {e}")
+                self.connection_string = None
     
     def _build_connection_string(self) -> str:
         """Build MSSQL connection string"""

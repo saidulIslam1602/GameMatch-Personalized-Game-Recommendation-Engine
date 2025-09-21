@@ -27,32 +27,7 @@
     <!-- Icons -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
-    <!-- Charts -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
-    <script>
-        // Ensure Chart.js is loaded and available globally
-        window.addEventListener('load', function() {
-            console.log('Page fully loaded, Chart.js available:', typeof Chart !== 'undefined');
-            if (typeof Chart !== 'undefined') {
-                console.log('Chart.js version:', Chart.version);
-                // Set global flag for chart availability
-                window.chartJsReady = true;
-                // Trigger chart creation if dashboard is already loaded
-                if (window.dashboardInstance && window.dashboardInstance.statsData) {
-                    console.log('Dashboard ready, creating charts...');
-                    window.dashboardInstance.createCharts(window.dashboardInstance.statsData);
-                }
-            }
-        });
-        
-        // Fallback: Load Chart.js synchronously if needed
-        if (typeof Chart === 'undefined') {
-            console.log('Chart.js not loaded, waiting...');
-            window.chartJsReady = false;
-        } else {
-            window.chartJsReady = true;
-        }
-    </script>
+    <!-- Charts removed for better performance -->
     
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
@@ -129,35 +104,7 @@
             <!-- Stats will be loaded dynamically -->
         </div>
         
-        <!-- Charts Section -->
-        <div class="games-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h3><i class="fas fa-chart-pie"></i> Analytics Dashboard</h3>
-                <button onclick="refreshCharts()" class="refresh-charts-btn" style="padding: 0.5rem 1rem; background: var(--primary-color); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem;">
-                    <i class="fas fa-sync-alt"></i> Refresh Charts
-                </button>
-            </div>
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <h3><i class="fas fa-chart-pie"></i> Genre Distribution</h3>
-                    <div class="chart-container">
-                        <canvas id="genreChart"></canvas>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <h3><i class="fas fa-dollar-sign"></i> Price Distribution</h3>
-                    <div class="chart-container">
-                        <canvas id="priceChart"></canvas>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <h3><i class="fas fa-star"></i> Rating Distribution</h3>
-                    <div class="chart-container">
-                        <canvas id="ratingChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <!-- Analytics removed for better performance -->
         
         <!-- Games Section -->
         <div class="games-section" id="gamesSection">

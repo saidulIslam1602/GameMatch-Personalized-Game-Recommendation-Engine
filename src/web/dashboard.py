@@ -22,23 +22,49 @@ import sqlite3
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root / "src"))
 
-from models.openai_finetuning import GameMatchFineTuner
-from data.dataset_loader import GameMatchDataLoader
-from web.mssql_auth import MSSQLUserAuth
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Load environment variables from .env file if it exists
+try:
+    from dotenv import load_dotenv
+    env_file = project_root / '.env'
+    if env_file.exists():
+        load_dotenv(env_file)
+        logger.info("Loaded environment variables from .env file")
+except ImportError:
+    logger.info("python-dotenv not available, using system environment variables only")
+
+from models.openai_finetuning import GameMatchFineTuner
+from data.dataset_loader import GameMatchDataLoader
+from web.mssql_auth import MSSQLUserAuth
 
 app = Flask(__name__, 
             template_folder='templates',
             static_folder='static')
 CORS(app)
 
-# Configure Flask
-app.config['SECRET_KEY'] = 'gamematch-secret-key-2024'
+# Configure Flask with secure settings
+# Use a consistent secret key to maintain sessions across restarts
+secret_key = os.getenv('FLASK_SECRET_KEY')
+if not secret_key:
+    # Generate and save a persistent secret key
+    secret_file = project_root / '.flask_secret'
+    if secret_file.exists():
+        secret_key = secret_file.read_text().strip()
+    else:
+        secret_key = secrets.token_urlsafe(32)
+        secret_file.write_text(secret_key)
+        logger.info("Generated new Flask secret key")
+
+app.config['SECRET_KEY'] = secret_key
 app.config['JSON_SORT_KEYS'] = False
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+app.config['SESSION_COOKIE_SECURE'] = os.getenv('ENVIRONMENT', 'development') == 'production'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_NAME'] = 'gamematch_session'
 
 class UserAuth:
     """User authentication and management system"""
@@ -367,12 +393,32 @@ class GameMatchDashboard:
         self.finetuner = GameMatchFineTuner()
         self.dataset_loader = GameMatchDataLoader()
         # Use MSSQL authentication with correct password
-        self.auth = MSSQLUserAuth(server="localhost", port=1433, database="gamematch", 
-                                          username="sa", password="Saidul1602")
+        # Use environment-based authentication
+        self.auth = MSSQLUserAuth()
         self.df = None
         self.user_profiles = {}  # Store user preferences and behavior
         self.session_data = {}   # Track current session interactions
         self.load_data()
+    
+    def clean_image_url(self, url):
+        """Clean and validate image URL"""
+        if not url or pd.isna(url) or str(url).lower() in ['nan', 'null', 'none', '']:
+            return ''
+        
+        url = str(url).strip()
+        
+        # Remove quotes and clean URL
+        url = url.replace('"', '').replace("'", '')
+        
+        # Check if it's a valid HTTP/HTTPS URL
+        if url.startswith(('http://', 'https://')):
+            return url
+        
+        # If it's a Steam CDN URL without protocol, add https
+        if url.startswith('steamcdn-a.akamaihd.net') or url.startswith('cdn.akamai.steamstatic.com'):
+            return 'https://' + url
+        
+        return ''
     
     def load_data(self):
         """Load processed game data from actual dataset"""
@@ -1025,16 +1071,35 @@ def api_recommendations():
 @app.route('/api/stats')
 def api_stats():
     """API endpoint for dashboard statistics"""
-    genre_stats = dashboard.get_genre_stats()
-    price_distribution = dashboard.get_price_distribution()
-    rating_distribution = dashboard.get_rating_distribution()
-    
-    return jsonify({
-        'genre_stats': genre_stats,
-        'price_distribution': price_distribution,
-        'rating_distribution': rating_distribution,
-        'total_games': len(dashboard.df)
-    })
+    try:
+        if dashboard.df is None or dashboard.df.empty:
+            return jsonify({
+                'error': 'Dataset not available',
+                'genre_stats': {},
+                'price_distribution': {},
+                'rating_distribution': {},
+                'total_games': 0
+            }), 503
+        
+        genre_stats = dashboard.get_genre_stats()
+        price_distribution = dashboard.get_price_distribution()
+        rating_distribution = dashboard.get_rating_distribution()
+        
+        return jsonify({
+            'genre_stats': genre_stats,
+            'price_distribution': price_distribution,
+            'rating_distribution': rating_distribution,
+            'total_games': len(dashboard.df)
+        })
+    except Exception as e:
+        logger.error(f"Error generating stats: {e}")
+        return jsonify({
+            'error': 'Internal server error',
+            'genre_stats': {},
+            'price_distribution': {},
+            'rating_distribution': {},
+            'total_games': 0
+        }), 500
 
 @app.route('/api/games/browse')
 def api_browse_games():
@@ -1096,7 +1161,7 @@ def api_browse_games():
                 'review_score': float(game['Review_Score']) if pd.notna(game['Review_Score']) else 0.0,
                 'total_reviews': int(game['Total_Reviews']) if pd.notna(game['Total_Reviews']) else 0,
                 'description': game['About the game'][:200] + '...' if pd.notna(game['About the game']) and len(str(game['About the game'])) > 200 else str(game['About the game']),
-                'header_image': game['Header image'] if pd.notna(game['Header image']) else '',
+                'header_image': dashboard.clean_image_url(game['Header image']) if pd.notna(game['Header image']) else '',
                 'release_date': str(game['Release date']) if pd.notna(game['Release date']) else '',
                 'developer': game['Developers'] if pd.notna(game['Developers']) else 'Unknown',
                 'publisher': game['Publishers'] if pd.notna(game['Publishers']) else 'Unknown',
@@ -1214,5 +1279,22 @@ if __name__ == '__main__':
     print("   • Visual statistics and charts")
     print("   • Game details and images")
     print("   • Real-time search and filtering")
+    print("\n🔧 Configuration:")
+    print(f"   • Environment: {os.getenv('ENVIRONMENT', 'development')}")
+    print(f"   • Debug mode: {os.getenv('DEBUG_MODE', 'false')}")
+    print(f"   • Database: {os.getenv('MSSQL_SERVER', 'localhost')}")
     
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Use environment-based configuration for debug mode
+    debug_mode = os.getenv('DEBUG_MODE', 'false').lower() == 'true'
+    port = int(os.getenv('FLASK_PORT', '5000'))
+    host = os.getenv('FLASK_HOST', '0.0.0.0' if debug_mode else '127.0.0.1')
+    
+    # Add simple test route
+    @app.route('/test')
+    def test_page():
+        """Simple test page"""
+        with open('test_simple.html', 'r') as f:
+            return f.read()
+    
+    logger.info(f"Starting Flask app on {host}:{port} (debug={debug_mode})")
+    app.run(debug=debug_mode, host=host, port=port)

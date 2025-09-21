@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .game-card { border: 1px solid #ddd; margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .game-image { height: 150px; background: #f0f0f0; margin-bottom: 10px; }
+        .game-image img { width: 100%; height: 100%; object-fit: cover; }
+        button { padding: 10px 20px; margin: 10px 0; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <h1>🎮 Simple GameMatch Test</h1>
+    
+    <div id="results"></div>
+    <button id="loadBtn" onclick="loadGames()">Load Games</button>
+    <button id="loadMoreBtn" onclick="loadMoreGames()" style="display:none;">Load More</button>
+    
+    <script>
+        let currentPage = 1;
+        let gamesContainer = document.getElementById('results');
+        
+        async function loadGames() {
+            console.log('Loading initial games...');
+            currentPage = 1;
+            gamesContainer.innerHTML = '';
+            await fetchAndDisplayGames();
+        }
+        
+        async function loadMoreGames() {
+            console.log('Loading more games...');
+            currentPage++;
+            await fetchAndDisplayGames();
+        }
+        
+        async function fetchAndDisplayGames() {
+            const loadBtn = document.getElementById('loadBtn');
+            const loadMoreBtn = document.getElementById('loadMoreBtn');
+            
+            try {
+                loadBtn.disabled = true;
+                loadMoreBtn.disabled = true;
+                loadMoreBtn.textContent = 'Loading...';
+                
+                const url = `/api/games/browse?genre=Action&limit=5&page=${currentPage}`;
+                console.log('Fetching from:', url);
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                console.log('Received data:', data);
+                
+                if (data.games && data.games.length > 0) {
+                    data.games.forEach(game => {
+                        const gameCard = document.createElement('div');
+                        gameCard.className = 'game-card';
+                        
+                        const imageDiv = document.createElement('div');
+                        imageDiv.className = 'game-image';
+                        
+                        if (game.header_image && game.header_image.trim() && game.header_image !== 'null') {
+                            const img = document.createElement('img');
+                            img.src = game.header_image;
+                            img.alt = game.name;
+                            img.onload = () => console.log('✅ Image loaded:', game.name);
+                            img.onerror = () => {
+                                console.log('❌ Image failed:', game.name, game.header_image);
+                                imageDiv.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#666;">${game.name}</div>`;
+                            };
+                            imageDiv.appendChild(img);
+                        } else {
+                            imageDiv.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#666;">${game.name}</div>`;
+                        }
+                        
+                        gameCard.appendChild(imageDiv);
+                        gameCard.innerHTML += `
+                            <h4>${game.name}</h4>
+                            <p>Price: ${game.price === 0 ? 'FREE' : '$' + game.price}</p>
+                            <p>Rating: ${(game.review_score * 100).toFixed(0)}%</p>
+                            <p>Reviews: ${game.total_reviews.toLocaleString()}</p>
+                        `;
+                        
+                        gamesContainer.appendChild(gameCard);
+                    });
+                    
+                    console.log(`✅ Added ${data.games.length} games (page ${currentPage})`);
+                    console.log(`Total games now: ${gamesContainer.children.length}`);
+                    
+                    loadMoreBtn.style.display = 'block';
+                    loadMoreBtn.textContent = 'Load More';
+                } else {
+                    console.log('No more games available');
+                    loadMoreBtn.textContent = 'No More Games';
+                }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                gamesContainer.innerHTML += `<div style="color:red;">Error: ${error.message}</div>`;
+            } finally {
+                loadBtn.disabled = false;
+                loadMoreBtn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
