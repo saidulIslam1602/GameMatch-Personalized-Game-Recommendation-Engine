@@ -1289,12 +1289,5 @@ if __name__ == '__main__':
     port = int(os.getenv('FLASK_PORT', '5000'))
     host = os.getenv('FLASK_HOST', '0.0.0.0' if debug_mode else '127.0.0.1')
     
-    # Add simple test route
-    @app.route('/test')
-    def test_page():
-        """Simple test page"""
-        with open('test_simple.html', 'r') as f:
-            return f.read()
-    
     logger.info(f"Starting Flask app on {host}:{port} (debug={debug_mode})")
     app.run(debug=debug_mode, host=host, port=port)
