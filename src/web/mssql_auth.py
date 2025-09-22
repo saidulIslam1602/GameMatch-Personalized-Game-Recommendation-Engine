@@ -123,9 +123,90 @@ class MSSQLUserAuth:
                 )
             ''')
             
+            # Create performance metrics table
+            cursor.execute('''
+                IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='performance_metrics' AND xtype='U')
+                CREATE TABLE performance_metrics (
+                    id INT IDENTITY(1,1) PRIMARY KEY,
+                    metric_name NVARCHAR(100) NOT NULL,
+                    metric_value FLOAT NOT NULL,
+                    user_id INT,
+                    session_id NVARCHAR(100),
+                    timestamp DATETIME2 DEFAULT GETDATE(),
+                    metadata NVARCHAR(MAX),
+                    INDEX IX_performance_metrics_timestamp (timestamp),
+                    INDEX IX_performance_metrics_metric_name (metric_name)
+                )
+            ''')
+            
+            # Create A/B testing experiments table
+            cursor.execute('''
+                IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='ab_experiments' AND xtype='U')
+                CREATE TABLE ab_experiments (
+                    id INT IDENTITY(1,1) PRIMARY KEY,
+                    experiment_id NVARCHAR(100) UNIQUE NOT NULL,
+                    experiment_name NVARCHAR(255) NOT NULL,
+                    description NVARCHAR(MAX),
+                    variants NVARCHAR(MAX) NOT NULL,
+                    traffic_allocation NVARCHAR(MAX) NOT NULL,
+                    success_metrics NVARCHAR(MAX) NOT NULL,
+                    status NVARCHAR(50) DEFAULT 'created',
+                    start_date DATETIME2,
+                    end_date DATETIME2,
+                    created_at DATETIME2 DEFAULT GETDATE()
+                )
+            ''')
+            
+            # Create A/B testing user assignments table
+            cursor.execute('''
+                IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='ab_user_assignments' AND xtype='U')
+                CREATE TABLE ab_user_assignments (
+                    id INT IDENTITY(1,1) PRIMARY KEY,
+                    experiment_id NVARCHAR(100) NOT NULL,
+                    user_id NVARCHAR(100) NOT NULL,
+                    variant NVARCHAR(100) NOT NULL,
+                    assigned_at DATETIME2 DEFAULT GETDATE(),
+                    UNIQUE (experiment_id, user_id),
+                    INDEX IX_ab_assignments_experiment_user (experiment_id, user_id)
+                )
+            ''')
+            
+            # Create A/B testing interactions table
+            cursor.execute('''
+                IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='ab_interactions' AND xtype='U')
+                CREATE TABLE ab_interactions (
+                    id INT IDENTITY(1,1) PRIMARY KEY,
+                    experiment_id NVARCHAR(100) NOT NULL,
+                    user_id NVARCHAR(100) NOT NULL,
+                    variant NVARCHAR(100) NOT NULL,
+                    success_metrics NVARCHAR(MAX),
+                    timestamp DATETIME2 DEFAULT GETDATE(),
+                    INDEX IX_ab_interactions_experiment (experiment_id),
+                    INDEX IX_ab_interactions_timestamp (timestamp)
+                )
+            ''')
+            
+            # Create system health monitoring table
+            cursor.execute('''
+                IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='system_health' AND xtype='U')
+                CREATE TABLE system_health (
+                    id INT IDENTITY(1,1) PRIMARY KEY,
+                    component_name NVARCHAR(100) NOT NULL,
+                    status NVARCHAR(50) NOT NULL,
+                    response_time_ms FLOAT,
+                    error_count INT DEFAULT 0,
+                    cpu_usage FLOAT,
+                    memory_usage FLOAT,
+                    timestamp DATETIME2 DEFAULT GETDATE(),
+                    metadata NVARCHAR(MAX),
+                    INDEX IX_system_health_timestamp (timestamp),
+                    INDEX IX_system_health_component (component_name)
+                )
+            ''')
+            
             conn.commit()
             conn.close()
-            logger.info("✅ MSSQL user database initialized")
+            logger.info("✅ MSSQL production database initialized with performance tracking")
             
         except Exception as e:
             logger.error(f"❌ Error initializing MSSQL database: {e}")
@@ -391,3 +472,196 @@ class MSSQLUserAuth:
         except Exception as e:
             logger.error(f"❌ Error getting user interactions: {e}")
             return []
+    
+    def save_performance_metric(self, metric_name, metric_value, user_id=None, session_id=None, metadata=None):
+        """Save performance metric to database"""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO performance_metrics (metric_name, metric_value, user_id, session_id, metadata)
+                VALUES (?, ?, ?, ?, ?)
+            """, (metric_name, metric_value, user_id, session_id, json.dumps(metadata) if metadata else None))
+            
+            conn.commit()
+            conn.close()
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error saving performance metric: {e}")
+            return False
+    
+    def get_performance_metrics(self, metric_name=None, hours=24):
+        """Get performance metrics from database"""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            
+            if metric_name:
+                cursor.execute("""
+                    SELECT metric_name, metric_value, timestamp, metadata
+                    FROM performance_metrics 
+                    WHERE metric_name = ? AND timestamp >= DATEADD(hour, -?, GETDATE())
+                    ORDER BY timestamp DESC
+                """, (metric_name, hours))
+            else:
+                cursor.execute("""
+                    SELECT metric_name, metric_value, timestamp, metadata
+                    FROM performance_metrics 
+                    WHERE timestamp >= DATEADD(hour, -?, GETDATE())
+                    ORDER BY timestamp DESC
+                """, (hours,))
+            
+            metrics = []
+            for row in cursor.fetchall():
+                metrics.append({
+                    'metric_name': row[0],
+                    'metric_value': row[1],
+                    'timestamp': row[2],
+                    'metadata': json.loads(row[3]) if row[3] else None
+                })
+            
+            conn.close()
+            return metrics
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting performance metrics: {e}")
+            return []
+    
+    def save_ab_experiment(self, experiment_id, experiment_name, description, variants, traffic_allocation, success_metrics):
+        """Save A/B testing experiment to database"""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO ab_experiments (experiment_id, experiment_name, description, variants, traffic_allocation, success_metrics)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                experiment_id, 
+                experiment_name, 
+                description,
+                json.dumps(variants),
+                json.dumps(traffic_allocation),
+                json.dumps(success_metrics)
+            ))
+            
+            conn.commit()
+            conn.close()
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error saving A/B experiment: {e}")
+            return False
+    
+    def assign_user_to_variant(self, experiment_id, user_id, variant):
+        """Assign user to A/B test variant"""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            
+            # Check if user already assigned
+            cursor.execute("""
+                SELECT variant FROM ab_user_assignments 
+                WHERE experiment_id = ? AND user_id = ?
+            """, (experiment_id, user_id))
+            
+            existing = cursor.fetchone()
+            if existing:
+                conn.close()
+                return existing[0]
+            
+            # Assign new variant
+            cursor.execute("""
+                INSERT INTO ab_user_assignments (experiment_id, user_id, variant)
+                VALUES (?, ?, ?)
+            """, (experiment_id, user_id, variant))
+            
+            conn.commit()
+            conn.close()
+            return variant
+            
+        except Exception as e:
+            logger.error(f"❌ Error assigning user to variant: {e}")
+            return "control"  # Default fallback
+    
+    def save_ab_interaction(self, experiment_id, user_id, variant, success_metrics):
+        """Save A/B testing interaction"""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO ab_interactions (experiment_id, user_id, variant, success_metrics)
+                VALUES (?, ?, ?, ?)
+            """, (experiment_id, user_id, variant, json.dumps(success_metrics)))
+            
+            conn.commit()
+            conn.close()
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error saving A/B interaction: {e}")
+            return False
+    
+    def get_ab_experiment_results(self, experiment_id):
+        """Get A/B testing experiment results"""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            
+            # Get experiment details
+            cursor.execute("""
+                SELECT experiment_name, variants, success_metrics
+                FROM ab_experiments 
+                WHERE experiment_id = ?
+            """, (experiment_id,))
+            
+            experiment = cursor.fetchone()
+            if not experiment:
+                conn.close()
+                return None
+            
+            # Get interaction data
+            cursor.execute("""
+                SELECT variant, success_metrics, timestamp
+                FROM ab_interactions 
+                WHERE experiment_id = ?
+            """, (experiment_id,))
+            
+            interactions = []
+            for row in cursor.fetchall():
+                interactions.append({
+                    'variant': row[0],
+                    'success_metrics': json.loads(row[1]) if row[1] else {},
+                    'timestamp': row[2]
+                })
+            
+            conn.close()
+            
+            return {
+                'experiment_name': experiment[0],
+                'variants': json.loads(experiment[1]),
+                'success_metrics': json.loads(experiment[2]),
+                'interactions': interactions
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting A/B experiment results: {e}")
+            return None
+    
+    def save_system_health(self, component_name, status, response_time_ms=None, error_count=0, cpu_usage=None, memory_usage=None, metadata=None):
+        """Save system health metrics"""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO system_health (component_name, status, response_time_ms, error_count, cpu_usage, memory_usage, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (component_name, status, response_time_ms, error_count, cpu_usage, memory_usage, json.dumps(metadata) if metadata else None))
+            
+            conn.commit()
+            conn.close()
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error saving system health: {e}")
+            return False

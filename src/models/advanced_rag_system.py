@@ -322,7 +322,8 @@ class AdvancedRAGRetriever:
             'semantic_similarity': self._semantic_similarity_search,
             'categorical_filter': self._categorical_filter_search,
             'hybrid_search': self._hybrid_search,
-            'collaborative_filter': self._collaborative_filter_search
+            'collaborative_filter': self._collaborative_filter_search,
+            'quality_aware_ranking': self._quality_aware_ranking_search
         }
     
     def retrieve(
@@ -604,6 +605,86 @@ class AdvancedRAGRetriever:
             results.append(result)
         
         return results
+    
+    def _quality_aware_ranking_search(
+        self, 
+        query: str, 
+        top_k: int, 
+        filters: Dict[str, Any]
+    ) -> List[RetrievalResult]:
+        """Quality-aware ranking that prioritizes high-quality games"""
+        
+        # Start with semantic similarity search as base
+        semantic_results = self._semantic_similarity_search(query, top_k * 2, filters)
+        
+        # Re-rank based on quality metrics
+        quality_scored_results = []
+        
+        for result in semantic_results:
+            doc = result.document
+            
+            # Calculate quality score based on multiple factors
+            quality_score = self._calculate_quality_score(doc)
+            
+            # Combine semantic relevance with quality score
+            # 70% semantic relevance, 30% quality score
+            combined_score = (result.relevance_score * 0.7) + (quality_score * 0.3)
+            
+            # Create new result with updated score
+            quality_result = RetrievalResult(
+                document=doc,
+                relevance_score=combined_score,
+                retrieval_reason=f"Quality-aware ranking (Quality: {quality_score:.2f}, Relevance: {result.relevance_score:.2f})",
+                query_match_details={
+                    "semantic_score": result.relevance_score,
+                    "quality_score": quality_score,
+                    "combined_score": combined_score,
+                    "match_type": "quality_aware_ranking"
+                }
+            )
+            quality_scored_results.append(quality_result)
+        
+        # Sort by combined score and return top results
+        quality_scored_results.sort(key=lambda x: x.relevance_score, reverse=True)
+        
+        return quality_scored_results[:top_k]
+    
+    def _calculate_quality_score(self, doc: GameDocument) -> float:
+        """Calculate quality score for a game based on multiple factors"""
+        quality_score = 0.0
+        
+        # Rating score (0-1 based on rating)
+        if doc.rating > 0:
+            rating_score = min(doc.rating / 100, 1.0)  # Normalize to 0-1
+            quality_score += rating_score * 0.4  # 40% weight
+        
+        # Review count score (logarithmic scale)
+        if doc.review_count > 0:
+            # Use log scale to prevent games with millions of reviews from dominating
+            review_score = min(math.log(doc.review_count + 1) / math.log(10000), 1.0)
+            quality_score += review_score * 0.3  # 30% weight
+        
+        # Content richness score (based on description length and metadata completeness)
+        content_score = 0.0
+        if doc.description and len(doc.description) > 100:
+            content_score += 0.3
+        if doc.genres and len(doc.genres) > 0:
+            content_score += 0.2
+        if doc.mechanics and len(doc.mechanics) > 0:
+            content_score += 0.2
+        if doc.themes and len(doc.themes) > 0:
+            content_score += 0.2
+        if doc.developer and doc.developer.strip():
+            content_score += 0.1
+        
+        quality_score += content_score * 0.2  # 20% weight
+        
+        # Recency bonus (newer games get slight boost)
+        if doc.release_year and doc.release_year >= 2020:
+            recency_bonus = 0.1
+            quality_score += recency_bonus * 0.1  # 10% weight
+        
+        return min(quality_score, 1.0)  # Cap at 1.0
     
     def _passes_filters(self, doc: GameDocument, filters: Dict[str, Any]) -> bool:
         """Check if document passes all filters"""

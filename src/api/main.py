@@ -23,7 +23,8 @@ from collections import defaultdict, deque
 from functools import wraps
 
 # Add src to path
-sys.path.append(str(Path(__file__).parent.parent))
+project_root = Path(__file__).parent.parent.parent
+sys.path.append(str(project_root / "src"))
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -47,7 +48,16 @@ startup_time = time.time()
 from models.advanced_rag_system import EnhancedRAGSystem
 from models.gaming_ontology import GamingOntologySystem
 from models.mlops_monitoring import RecommendationTracker, PerformanceMonitor
+from models.advanced_prompt_engineering import AdvancedPromptEngineer, PromptStrategy, PromptContext
 from data.dataset_loader import GameMatchDataLoader
+
+# OpenAI integration
+try:
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    logger.warning("OpenAI library not available. Fine-tuned model features will be disabled.")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -87,6 +97,9 @@ ontology_system: GamingOntologySystem = None
 tracker: RecommendationTracker = None
 monitor: PerformanceMonitor = None
 games_df: pd.DataFrame = None
+openai_client: OpenAI = None
+prompt_engineer: AdvancedPromptEngineer = None
+fine_tuned_model_id = "ft:gpt-3.5-turbo-1106:personal::8lLwBrjg"
 
 # Rate limiting storage
 rate_limit_storage = defaultdict(deque)
@@ -223,7 +236,7 @@ async def get_api_key(credentials: HTTPAuthorizationCredentials = Depends(securi
 @app.on_event("startup")
 async def startup_event():
     """Initialize all components on startup"""
-    global rag_system, ontology_system, tracker, monitor, games_df
+    global rag_system, ontology_system, tracker, monitor, games_df, openai_client, prompt_engineer
     
     logger.info("🚀 Starting GameMatch API...")
     
@@ -271,6 +284,28 @@ async def startup_event():
             logger.warning(f"⚠️  Monitoring system disabled: {e}")
             tracker = None
             monitor = None
+        
+        # Initialize OpenAI components
+        logger.info("🤖 Initializing OpenAI integration...")
+        try:
+            if OPENAI_AVAILABLE:
+                # Load API key from config
+                api_key_path = project_root / "config" / "openai_key.txt"
+                if api_key_path.exists():
+                    with open(api_key_path, 'r') as f:
+                        api_key = f.read().strip()
+                    
+                    openai_client = OpenAI(api_key=api_key)
+                    prompt_engineer = AdvancedPromptEngineer()
+                    logger.info("✅ OpenAI integration ready")
+                else:
+                    logger.warning("⚠️ OpenAI API key file not found")
+            else:
+                logger.warning("⚠️ OpenAI library not available")
+        except Exception as e:
+            logger.warning(f"⚠️ OpenAI initialization failed: {e}")
+            openai_client = None
+            prompt_engineer = None
         
         logger.info("🎉 GameMatch API fully initialized!")
         
@@ -374,9 +409,52 @@ async def get_recommendations(
                 detail="Failed to process recommendation request. Please try again."
             )
         
+        # Enhance recommendations with fine-tuned model if available
+        enhanced_context = rag_context
+        if openai_client and prompt_engineer:
+            try:
+                # Generate enhanced prompt using RAG context
+                prompt_context = PromptContext(
+                    user_persona="api_user",
+                    interaction_history=[],
+                    preferred_genres=[],
+                    difficulty_level="intermediate"
+                )
+                
+                enhanced_prompt = prompt_engineer.generate_prompt(
+                    query=request.query,
+                    strategy=PromptStrategy.CONTEXTUAL,
+                    context=prompt_context,
+                    rag_context=rag_context.formatted_context if hasattr(rag_context, 'formatted_context') else "",
+                    additional_info={
+                        'num_recommendations': request.max_results,
+                        'strategy': request.strategy
+                    }
+                )
+                
+                # Call fine-tuned model for enhanced reasoning
+                ai_response = openai_client.chat.completions.create(
+                    model=fine_tuned_model_id,
+                    messages=[
+                        {"role": "system", "content": "You are GameMatch, an expert game recommendation AI. Provide insights and reasoning for game recommendations."},
+                        {"role": "user", "content": enhanced_prompt}
+                    ],
+                    max_tokens=500,
+                    temperature=0.7
+                )
+                
+                # Add AI reasoning to context metadata
+                if hasattr(enhanced_context, 'search_metadata'):
+                    enhanced_context.search_metadata['ai_reasoning'] = ai_response.choices[0].message.content
+                
+                logger.info("✅ Enhanced recommendations with fine-tuned model")
+                
+            except Exception as e:
+                logger.warning(f"⚠️ Fine-tuned model enhancement failed: {e}")
+        
         # Convert RAG results to API format
         recommendations = []
-        for result in rag_context.retrieved_documents:
+        for result in enhanced_context.retrieved_documents:
             doc = result.document
             
             recommendation = GameRecommendation(
